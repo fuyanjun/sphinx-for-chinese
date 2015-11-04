@@ -21,6 +21,7 @@
 #include "sphinxint.h"
 #include "sphinxstem.h"
 #include <math.h>
+#include "iconv.h"
 
 #define SNOWBALL 0
 #define CROSSCHECK 0
@@ -109,6 +110,22 @@ ISphTokenizer * CreateTestTokenizer ( DWORD uMode )
 	return pTokenizer1;
 }
 
+
+int code_convert(char *from_charset,char *to_charset,const char *inbuf,size_t inlen,char *outbuf,size_t outlen) 
+{ 
+	iconv_t cd; 
+	int rc; 
+	//char **pin = &inbuf; 
+	char **pout = &outbuf; 
+
+	cd = iconv_open(to_charset,from_charset); 
+	if (cd==0) return -1; 
+	memset(outbuf, 0, outlen); 
+	if (iconv(cd, &inbuf, &inlen, pout, &outlen)==-1) 
+		return -1; 
+	iconv_close(cd); 
+	return 0; 
+} 
 
 void TestTokenizer()
 {
@@ -563,6 +580,25 @@ void TestTokenizer()
 	pTokenizer = sphCreateUTF8Tokenizer();
 	pTokenizer->SetBuffer ( (BYTE*)sTest21, sizeof(sTest21) );
 	assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "\xF4\x80\x80\x80\x32\x34" ) );
+	delete pTokenizer;
+
+	//printf((char *)sTest21);
+	//char * test = "中国共产党带领我们打天下";
+	//BYTE test[] = "\xe4\xb8\xa4\xe5\x8f\xaa\xe7\x8b\xbc\xe6\x9d\xa5\xe5\x88\xb0\xe8\x8d\x89\xe5\x8e\x9f\xef\xbc\x8c\xe4\xb8\x80\xe5\x8f\xaa\xe7\x8b\xbc\xe6\x84\x9f\xe5\x88\xb0\xe5\xbe\x88\xe5\xa4\xb1\xe8\x90\xbd\xef\xbc\x8c\xe5\x9b\xa0\xe4\xb8\xba\xe5\xae\x83\xe7\x9c\x8b\xe4\xb8\x8d\xe8\xa7\x81\xe8\x82\x89\xef\xbc\x8c\xe8\xbf\x99\xe6\x98\xaf\xe8\xa7\x86\xe5\x8a\x9b;\xe5\x8f\xa6\xe4\xb8\x80\xe5\x8f\xaa\xe7\x8b\xbc\xe6\x84\x9f\xe5\x88\xb0\xe5\xbe\x88\xe5\x85\xb4\xe5\xa5\x8b\xef\xbc\x8c\xe5\x9b\xa0\xe4\xb8\xba\xe5\xae\x83\xe7\x9f\xa5\xe9\x81\x93\xe6\x9c\x89\xe8\x8d\x89\xe5\xb0\xb1\xe4\xbc\x9a\xe6\x9c\x89\xe7\xbe\x8a\xef\xbc\x8c\xe8\xbf\x99\xe6\x98\xaf\xe8\xa7\x86\xe9\x87\x8e\xe3\x80\x82\xe7\x9c\xbc\xe7\x9d\x9b\xe5\x8f\xaa\xe8\x83\xbd\xe7\x9c\x8b\xe5\x88\xb0\xe5\xbd\x93\xe4\xb8\x8b\xef\xbc\x8c\xe7\x9c\xbc\xe5\x85\x89\xe5\x8d\xb4\xe8\x83\xbd\xe7\x9c\x8b\xe5\x88\xb0\xe6\x9c\xaa\xe6\x9d\xa5\xef\xbc\x8csphinx is good at searching.";
+	BYTE test[] = "\xe4\xb8\xad\xe5\x9b\xbd\xe5\x85\xb1\xe4\xba\xa7\xe5\x85\x9a\xe5\xb8\xa6\xe9\xa2\x86\xe6\x88\x91\xe4\xbb\xac\xe6\x89\x93\xe5\xa4\xa9\xe4\xb8\x8b";
+	pTokenizer = sphCreateUTF8ChineseTokenizer();
+	pTokenizer->SetBuffer ( (BYTE*)test, sizeof(test) );
+	CSphString err;
+	pTokenizer->SetChineseDictionary("D:\\sphinx\\sphinx-2.2.10-release\\bin\\Debug\\xdict", err);
+	char gb[255];
+	size_t outlen = 255;
+	BYTE *token;
+	while ((token = pTokenizer->GetToken()) != NULL)
+	{
+		code_convert("utf-8","gb2312", (char *)token, strlen((char*)token), gb,outlen);
+		printf(gb);
+		printf("\n");
+	}
 	delete pTokenizer;
 }
 
@@ -3719,30 +3755,31 @@ int main ()
 	BenchLocators ();
 	BenchThreads ();
 #else
-	TestAppendf();
-	TestQueryParser ();
-	TestQueryTransforms ();
-	TestStripper ();
+	//TestAppendf();
+	//TestQueryParser ();
+	//TestQueryTransforms ();
+	//TestStripper ();
 	TestTokenizer ();
-	TestExpr ();
-	TestMisc ();
-	TestRwlock ();
-	TestCleanup ();
-	TestStridedSort ();
-	TestRTWeightBoundary ();
-	TestWriter();
-	TestRTSendVsMerge ();
-	TestSentenceTokenizer ();
-	TestSpanSearch ();
-	TestWildcards();
-	TestLog2();
-	TestArabicStemmer();
-	TestSource ();
-	TestRankerFactors ();
+	//TestExpr ();
+	//TestMisc ();
+	//TestRwlock ();
+	//TestCleanup ();
+	//TestStridedSort ();
+	//TestRTWeightBoundary ();
+	//TestWriter();
+	//TestRTSendVsMerge ();
+	//TestSentenceTokenizer ();
+	//TestSpanSearch ();
+	//TestWildcards();
+	//TestLog2();
+	//TestArabicStemmer();
+	//TestSource ();
+	//TestRankerFactors ();
 #endif
 
 	unlink ( g_sTmpfile );
 	printf ( "\nSUCCESS\n" );
+	getchar();
 	return 0;
 }
 

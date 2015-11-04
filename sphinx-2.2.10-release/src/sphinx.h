@@ -405,6 +405,7 @@ class CSphLowercaser
 	friend class ISphTokenizer;
 	friend class CSphTokenizerBase;
 	friend class CSphTokenizer_UTF8_Base;
+	template<bool> friend class CSphTokenizer_UTF8Chinese;
 	friend class CSphTokenizerBase2;
 
 public:
@@ -491,6 +492,7 @@ struct CSphTokenizerSettings
 	CSphString			m_sBlendChars;
 	CSphString			m_sBlendMode;
 	CSphString			m_sIndexingPlugin;	///< this tokenizer wants an external plugin to process its raw output
+	CSphString          m_sChineseDictionary;
 
 						CSphTokenizerSettings ();
 };
@@ -554,6 +556,9 @@ public:
 
 	/// set n-gram length (for CJK n-gram indexing)
 	virtual void					SetNgramLen ( int ) {}
+
+	/// set Chinese dictionary (for Chinese segmentation and indexing)
+	virtual bool					SetChineseDictionary ( const char *, CSphString & ) { return true; }
 
 	/// load synonyms list
 	virtual bool					LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError ) = 0;
@@ -744,6 +749,9 @@ bool					sphParseCharset ( const char * sCharset, CSphVector<CSphRemapRange> & d
 
 /// create UTF-8 tokenizer
 ISphTokenizer *			sphCreateUTF8Tokenizer ();
+
+/// create UTF-8 tokenizer
+ISphTokenizer *			sphCreateUTF8ChineseTokenizer ();
 
 /// create UTF-8 tokenizer with n-grams support (for CJK n-gram indexing)
 ISphTokenizer *			sphCreateUTF8NgramTokenizer ();

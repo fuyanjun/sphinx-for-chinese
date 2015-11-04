@@ -17771,7 +17771,8 @@ void DumpIndexSettings ( CSphStringBuilder & tBuf, CSphIndex * pIndex )
 	if ( pIndex->GetTokenizer() )
 	{
 		const CSphTokenizerSettings & tTokSettings = pIndex->GetTokenizer()->GetSettings();
-		DumpKey ( tBuf, "charset_type",		( tTokSettings.m_iType==TOKENIZER_UTF8 || tTokSettings.m_iType==TOKENIZER_NGRAM )
+		DumpKey ( tBuf, "charset_type",		( tTokSettings.m_iType==TOKENIZER_UTF8 || tTokSettings.m_iType==TOKENIZER_NGRAM 
+			|| tTokSettings.m_iType==TOKENIZER_CHINESE)
 											? "utf-8"
 											: "unknown tokenizer (deprecated sbcs?)", true );
 		DumpKey ( tBuf, "charset_table",	tTokSettings.m_sCaseFolding.cstr(),		!tTokSettings.m_sCaseFolding.IsEmpty() );

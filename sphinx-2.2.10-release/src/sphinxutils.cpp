@@ -406,6 +406,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "embedded_limit",			0, NULL },
 	{ "min_word_len",			0, NULL },
 	{ "charset_type",			KEY_REMOVED, NULL },
+	{ "chinese_dictionary",     0, NULL },
 	{ "charset_table",			0, NULL },
 	{ "ignore_chars",			0, NULL },
 	{ "min_prefix_len",			0, NULL },
@@ -1133,13 +1134,18 @@ void sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings 
 {
 	tSettings.m_iNgramLen = Max ( hIndex.GetInt ( "ngram_len" ), 0 );
 
-	if ( hIndex ( "ngram_chars" ) )
-	{
-		if ( tSettings.m_iNgramLen )
-			tSettings.m_iType = TOKENIZER_NGRAM;
-		else
-			sphWarning ( "ngram_chars specified, but ngram_len=0; IGNORED" );
-	}
+	//if ( !hIndex("charset_type") || hIndex["charset_type"]=="utf-8" )
+	//{
+		tSettings.m_iType = hIndex("chinese_dictionary") ? TOKENIZER_CHINESE:( hIndex("ngram_chars") ? TOKENIZER_NGRAM : TOKENIZER_UTF8 );
+		if ( hIndex ( "ngram_chars" ) )
+		{
+			if ( tSettings.m_iNgramLen )
+				tSettings.m_iType = TOKENIZER_NGRAM;
+			else
+				sphWarning ( "ngram_chars specified, but ngram_len=0; IGNORED" );
+		}
+
+	//}
 
 	tSettings.m_sCaseFolding = hIndex.GetStr ( "charset_table" );
 	tSettings.m_iMinWordLen = Max ( hIndex.GetInt ( "min_word_len", 1 ), 1 );
