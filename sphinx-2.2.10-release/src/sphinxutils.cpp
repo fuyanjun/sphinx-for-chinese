@@ -1134,22 +1134,19 @@ void sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings 
 {
 	tSettings.m_iNgramLen = Max ( hIndex.GetInt ( "ngram_len" ), 0 );
 
-	//if ( !hIndex("charset_type") || hIndex["charset_type"]=="utf-8" )
-	//{
-		tSettings.m_iType = hIndex("chinese_dictionary") ? TOKENIZER_CHINESE:( hIndex("ngram_chars") ? TOKENIZER_NGRAM : TOKENIZER_UTF8 );
-		if ( hIndex ( "ngram_chars" ) )
-		{
-			if ( tSettings.m_iNgramLen )
-				tSettings.m_iType = TOKENIZER_NGRAM;
-			else
-				sphWarning ( "ngram_chars specified, but ngram_len=0; IGNORED" );
-		}
-
-	//}
+	tSettings.m_iType = hIndex("chinese_dictionary") ? TOKENIZER_CHINESE:( hIndex("ngram_chars") ? TOKENIZER_NGRAM : TOKENIZER_UTF8 );
+	if ( hIndex ( "ngram_chars" ) )
+	{
+		if ( tSettings.m_iNgramLen )
+			tSettings.m_iType = TOKENIZER_NGRAM;
+		else
+			sphWarning ( "ngram_chars specified, but ngram_len=0; IGNORED" );
+	}
 
 	tSettings.m_sCaseFolding = hIndex.GetStr ( "charset_table" );
 	tSettings.m_iMinWordLen = Max ( hIndex.GetInt ( "min_word_len", 1 ), 1 );
 	tSettings.m_sNgramChars = hIndex.GetStr ( "ngram_chars" );
+	tSettings.m_sChineseDictionary  = hIndex.GetStr( "chinese_dictionary" );
 	tSettings.m_sSynonymsFile = hIndex.GetStr ( "exceptions" ); // new option name
 	tSettings.m_sIgnoreChars = hIndex.GetStr ( "ignore_chars" );
 	tSettings.m_sBlendChars = hIndex.GetStr ( "blend_chars" );

@@ -4451,7 +4451,7 @@ bool LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings & tSett
 		return true;
 
 	tSettings.m_iType = tReader.GetByte ();
-	if ( tSettings.m_iType!=TOKENIZER_UTF8 && tSettings.m_iType!=TOKENIZER_NGRAM )
+	if ( tSettings.m_iType!=TOKENIZER_UTF8 && tSettings.m_iType!=TOKENIZER_NGRAM && tSettings.m_iType!=TOKENIZER_CHINESE )
 	{
 		sWarning = "can't load an old index with SBCS tokenizer";
 		return false;
@@ -4481,8 +4481,11 @@ bool LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings & tSett
 	tSettings.m_sNgramChars = tReader.GetString ();
 	if ( uVersion>=15 )
 		tSettings.m_sBlendChars = tReader.GetString ();
-	if ( uVersion>=24 )
+	if ( uVersion>=24 ) 
+	{
 		tSettings.m_sBlendMode = tReader.GetString();
+		tSettings.m_sChineseDictionary = tReader.GetString();
+	}
 
 	return true;
 }
