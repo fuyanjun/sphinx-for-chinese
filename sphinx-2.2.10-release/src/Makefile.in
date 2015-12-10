@@ -34,7 +34,7 @@ NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
 bin_PROGRAMS = indexer$(EXEEXT) searchd$(EXEEXT) spelldump$(EXEEXT) \
-	indextool$(EXEEXT) wordbreaker$(EXEEXT) mkdict$(EXEEXT)
+	indextool$(EXEEXT) wordbreaker$(EXEEXT)
 noinst_PROGRAMS = tests$(EXEEXT)
 subdir = src
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
@@ -93,10 +93,6 @@ am_wordbreaker_OBJECTS = wordbreaker.$(OBJEXT)
 wordbreaker_OBJECTS = $(am_wordbreaker_OBJECTS)
 wordbreaker_LDADD = $(LDADD)
 wordbreaker_DEPENDENCIES = $(am__DEPENDENCIES_2)
-am_mkdict_OBJECTS = mkdict.$(OBJEXT)
-mkdict_OBJECTS = $(am_mkdict_OBJECTS)
-mkdict_LDADD = $(LDADD)
-mkdict_DEPENDENCIES = $(am__DEPENDENCIES_2)
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/config
 depcomp = $(SHELL) $(top_srcdir)/config/depcomp
 am__depfiles_maybe = depfiles
@@ -112,10 +108,10 @@ CXXLINK = $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
 	-o $@
 SOURCES = $(libsphinx_a_SOURCES) $(indexer_SOURCES) \
 	$(indextool_SOURCES) $(searchd_SOURCES) $(spelldump_SOURCES) \
-	$(tests_SOURCES) $(wordbreaker_SOURCES) $(mkdict_SOURCES)
+	$(tests_SOURCES) $(wordbreaker_SOURCES)
 DIST_SOURCES = $(libsphinx_a_SOURCES) $(indexer_SOURCES) \
 	$(indextool_SOURCES) $(searchd_SOURCES) $(spelldump_SOURCES) \
-	$(tests_SOURCES) $(wordbreaker_SOURCES) $(mkdict_SOURCES)
+	$(tests_SOURCES) $(wordbreaker_SOURCES)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -236,7 +232,6 @@ spelldump_SOURCES = spelldump.cpp
 indextool_SOURCES = indextool.cpp
 tests_SOURCES = tests.cpp
 wordbreaker_SOURCES = wordbreaker.cpp
-mkdict_SOURCES = mkdict.cpp
 BUILT_SOURCES = extract-version
 @USE_RLP_FALSE@RLP_LIBS = 
 @USE_RLP_TRUE@RLP_LIBS = -L$(top_srcdir)/rlp/lib/amd64-glibc25-gcc42 -lbtrlpc -lbtrlpcore -lbtutils
@@ -345,9 +340,6 @@ tests$(EXEEXT): $(tests_OBJECTS) $(tests_DEPENDENCIES) $(EXTRA_tests_DEPENDENCIE
 wordbreaker$(EXEEXT): $(wordbreaker_OBJECTS) $(wordbreaker_DEPENDENCIES) $(EXTRA_wordbreaker_DEPENDENCIES) 
 	@rm -f wordbreaker$(EXEEXT)
 	$(CXXLINK) $(wordbreaker_OBJECTS) $(wordbreaker_LDADD) $(LIBS)
-mkdict$(EXEEXT): $(mkdict_OBJECTS) $(mkdict_DEPENDENCIES) $(EXTRA_mkdict_DEPENDENCIES) 
-	@rm -f mkdict$(EXEEXT)
-	$(CXXLINK) $(mkdict_OBJECTS) $(mkdict_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
