@@ -2594,22 +2594,36 @@ public:
 template < bool IS_QUERY >
 class CSphTokenizer_UTF8Chinese : public CSphTokenizerBase2
 {
+private:
+	virtual BYTE *							GetTokenQuery ();	// Get token for query
+	virtual void							DoGetTokens ();		// Pre-tokenize for index
+	virtual BYTE *							GetLatinToken ();	// Called by DoGetTokens
+
+	CSphVector<BYTE *>						m_sTokens;			// Pre-tokenized tokens
+	CSphVector<BYTE *>						m_pTokenStarts;		// Store pre-tokenized token starts
+	CSphVector<BYTE *>						m_pTokenEnds;		// Store pre-tokenized token ends
+	bool									m_bTokenized;		// Pre-tokenized or not
+	int										m_iCurToken;		// Cur token index
+
 public:
 	CSphTokenizer_UTF8Chinese ();
+	~CSphTokenizer_UTF8Chinese ();
 	virtual bool                            SetChineseDictionary ( const char * sConfig, CSphString & sError );
 	virtual void                            SetBuffer ( const BYTE * sBuffer, int iLength );
 	virtual BYTE *                          GetToken ();
 	virtual void                                            FlushAccum ();
-	virtual ISphTokenizer *         Clone ( ESphTokenizerClone eMode ) const;
+	virtual ISphTokenizer *					Clone ( ESphTokenizerClone eMode ) const;
 	virtual bool                            IsUtf8 () const { return true; }
 	virtual int                                     GetCodepointLength ( int iCode ) const;
 	virtual int                                     GetMaxCodepointLength () const { return m_tLC.GetMaxCodepointLength(); }
 
+	virtual const char *					GetTokenStart () const;
+	virtual const char *					GetTokenEnd () const;
 
 	int                                     getBestWordLength(Darts::DoubleArray::key_type *pText, size_t iTextLength);
 	Darts::DoubleArray                      m_tDa;
 	Darts::DoubleArray::key_type            *m_pText;
-	Darts::DoubleArray::result_pair_type    m_pResultPair[256];
+	Darts::DoubleArray::result_pair_type    m_pResultPair[256];								
 };
 
 
@@ -6459,6 +6473,15 @@ CSphTokenizer_UTF8Chinese<IS_QUERY>::CSphTokenizer_UTF8Chinese ()
 	CSphString sTmp;
 	SetCaseFolding ( SPHINX_DEFAULT_UTF8_TABLE, sTmp );
 	m_bHasBlend = false;
+	m_bTokenized = false;
+	m_iCurToken = -1;
+}
+
+template < bool IS_QUERY >
+CSphTokenizer_UTF8Chinese<IS_QUERY>::~CSphTokenizer_UTF8Chinese ()
+{
+	// release tokens without reset vector because it will be reset by deconstructor.
+	m_sTokens.ReleaseAll(false);
 }
 
 
@@ -6477,6 +6500,13 @@ void CSphTokenizer_UTF8Chinese<IS_QUERY>::SetBuffer ( const BYTE * sBuffer, int 
 
 	m_iOvershortCount = 0;
 	m_bBoundary = m_bTokenBoundary = false;
+	m_bTokenized = false;
+	m_iCurToken = -1;
+	
+	// release all tokens if any
+	m_sTokens.ReleaseAll(true);
+	m_pTokenStarts.Reset();
+	m_pTokenEnds.Reset();
 }
 
 template < bool IS_QUERY >
@@ -6749,6 +6779,29 @@ bool CSphTokenizer_UTF8Chinese<IS_QUERY>::SetChineseDictionary ( const char * sC
 template < bool IS_QUERY >
 BYTE * CSphTokenizer_UTF8Chinese<IS_QUERY>::GetToken ()
 {
+	if (IS_QUERY) 
+	{
+		// use MMSEG for query 
+		return GetTokenQuery();
+	} 
+	else
+	{
+		//try to mutli-segs for index
+		//CSphVector<const char*> dFields;
+		//ARRAY_FOREACH ( i, s.m_dFields )
+		//	dFields.Add ( s.m_dFields[i].m_sName.cstr() );
+		if (!m_bTokenized)
+		{
+			DoGetTokens();	
+		}
+
+		return m_iCurToken < m_sTokens.GetLength() ? m_sTokens[m_iCurToken++] : NULL;
+	}
+}
+
+template < bool IS_QUERY >
+BYTE * CSphTokenizer_UTF8Chinese<IS_QUERY>::GetTokenQuery ()
+{
 	m_bWasSpecial = false;
 	m_bBlended = false;
 	m_iOvershortCount = 0;
@@ -7007,6 +7060,317 @@ BYTE * CSphTokenizer_UTF8Chinese<IS_QUERY>::GetToken ()
 
 }
 
+template < bool IS_QUERY >
+BYTE * CSphTokenizer_UTF8Chinese<IS_QUERY>::GetLatinToken ()
+{
+	//original utf8 handler, it is borrowed here to process unmatched characters
+	//mostly for the latin characters I guess
+	//start=====================================================================        
+	bool IS_BLEND = m_bHasBlend;
+	bool bGotNonToken = ( !IS_QUERY || m_bPhrase ); // only do this in query mode, never in indexing mode, never within phrases
+	bool bGotSoft = false; // hey Beavis he said soft huh huhhuh
+
+	for ( ;; )
+	{
+		// get next codepoint
+		const BYTE * pCur = m_pCur; // to redo special char, if there's a token already
+
+		int iCodePoint;
+		int iCode;
+		if ( pCur<m_pBufferMax && *pCur<128 )
+		{
+			iCodePoint = *m_pCur++;
+			iCode = m_tLC.m_pChunk[0][iCodePoint];
+		} else
+		{
+			iCodePoint = GetCodepoint(); // advances m_pCur
+			iCode = m_tLC.ToLower ( iCodePoint );
+		}
+
+		// handle escaping
+		bool bWasEscaped = ( IS_QUERY && iCodePoint=='\\' ); // whether current codepoint was escaped
+		if ( bWasEscaped )
+		{
+			iCodePoint = GetCodepoint();
+			iCode = m_tLC.ToLower ( iCodePoint );
+			if ( !Special2Simple ( iCode ) )
+				iCode = 0;
+		}
+
+		// handle eof
+		if ( iCode<0 )
+		{
+			// skip trailing short word
+			FlushAccum ();
+			if ( m_iLastTokenLen<m_tSettings.m_iMinWordLen )
+			{
+				if ( !m_bShortTokenFilter || !ShortTokenFilter ( m_sAccum, m_iLastTokenLen ) )
+				{
+					if ( m_iLastTokenLen )
+						m_iOvershortCount++;
+					m_iLastTokenLen = 0;
+					if_const ( IS_BLEND )
+						BlendAdjust ( pCur );
+					return NULL;
+				}
+			}
+
+			// keep token end here as BlendAdjust might change m_pCur
+			m_pTokenEnd = m_pCur;
+
+			// return trailing word
+			if_const ( IS_BLEND && !BlendAdjust ( pCur ) )
+				return NULL;
+			if_const ( IS_BLEND && m_bBlended )
+				return GetBlendedVariant();
+			return m_sAccum;
+		}
+
+		// handle all the flags..
+		if_const ( IS_QUERY )
+			iCode = CodepointArbitrationQ ( iCode, bWasEscaped, *m_pCur );
+		else if ( m_bDetectSentences )
+			iCode = CodepointArbitrationI ( iCode );
+
+		// handle ignored chars
+		if ( iCode & FLAG_CODEPOINT_IGNORE )
+			continue;
+
+		// handle blended characters
+		if_const ( IS_BLEND && ( iCode & FLAG_CODEPOINT_BLEND ) )
+		{
+			if ( m_pBlendEnd )
+				iCode = 0;
+			else
+			{
+				m_bBlended = true;
+				m_pBlendStart = m_iAccum ? m_pTokenStart : pCur;
+			}
+		}
+
+		// handle soft-whitespace-only tokens
+		if ( !bGotNonToken && !m_iAccum )
+		{
+			if ( !bGotSoft )
+			{
+				// detect opening soft whitespace
+				if ( ( iCode==0 && !( iCode & MASK_FLAGS ) && !IsWhitespace ( iCodePoint ) )
+					|| ( ( iCode & FLAG_CODEPOINT_BLEND ) && !m_iAccum ) )
+				{
+					bGotSoft = true;
+				}
+			} else
+			{
+				// detect closing hard whitespace or special
+				// (if there was anything meaningful in the meantime, we must never get past the outer if!)
+				if ( IsWhitespace ( iCodePoint ) || ( iCode & FLAG_CODEPOINT_SPECIAL ) )
+				{
+					m_iOvershortCount++;
+					bGotNonToken = true;
+				}
+			}
+		}
+
+		// handle whitespace and boundary
+		if ( m_bBoundary && ( iCode==0 ) )
+		{
+			m_bTokenBoundary = true;
+			m_iBoundaryOffset = pCur - m_pBuffer - 1;
+		}
+		m_bBoundary = ( iCode & FLAG_CODEPOINT_BOUNDARY )!=0;
+
+		if ( iCode==0 || m_bBoundary )
+		{
+			FlushAccum ();
+			if_const ( IS_BLEND && !BlendAdjust ( pCur ) )
+				continue;
+
+			if ( m_iLastTokenLen<m_tSettings.m_iMinWordLen
+				&& !( m_bShortTokenFilter && ShortTokenFilter ( m_sAccum, m_iLastTokenLen ) ) )
+			{
+				if ( m_iLastTokenLen )
+					m_iOvershortCount++;
+				continue;
+				//break;
+			} else
+			{
+				m_pTokenEnd = pCur;
+				if(m_tDa.commonPrefixSearch((Darts::DoubleArray::key_type *)(pCur), m_pResultPair, 256, m_pBufferMax-m_pCur)>0) {
+					m_pCur=pCur;
+				}
+
+				if_const ( IS_BLEND && m_bBlended )
+					return GetBlendedVariant();
+				return m_sAccum;
+			}
+		}
+
+		// handle specials
+		if ( iCode & FLAG_CODEPOINT_SPECIAL )
+		{
+			// skip short words preceding specials
+			if ( m_iAccum<m_tSettings.m_iMinWordLen )
+			{
+				m_sAccum[m_iAccum] = '\0';
+
+				if ( !m_bShortTokenFilter || !ShortTokenFilter ( m_sAccum, m_iAccum ) )
+				{
+					if ( m_iAccum )
+						m_iOvershortCount++;
+
+					FlushAccum ();
+				}
+			}
+
+			if ( m_iAccum==0 )
+			{
+				m_bNonBlended = m_bNonBlended || ( !( iCode & FLAG_CODEPOINT_BLEND ) && !( iCode & FLAG_CODEPOINT_SPECIAL ) );
+				m_bWasSpecial = !( iCode & FLAG_CODEPOINT_NGRAM );
+				m_pTokenStart = pCur;
+				m_pTokenEnd = m_pCur;
+				AccumCodepoint ( iCode & MASK_CODEPOINT ); // handle special as a standalone token
+			} else
+			{
+				m_pCur = pCur; // we need to flush current accum and then redo special char again
+				m_pTokenEnd = pCur;
+			}
+
+			FlushAccum ();
+			if_const ( IS_BLEND )
+			{
+				if ( !BlendAdjust ( pCur ) )
+					continue;
+				if ( m_bBlended )
+					return GetBlendedVariant();
+			}
+			return m_sAccum;
+		}
+
+		if ( m_iAccum==0 )
+			m_pTokenStart = pCur;
+
+		// tricky bit
+		// heading modifiers must not (!) affected blended status
+		// eg. we want stuff like '=-' (w/o apostrophes) thrown away when pure_blend is on
+		if_const ( IS_BLEND )
+			if_const (!( IS_QUERY && !m_iAccum && sphIsModifier ( iCode & MASK_CODEPOINT ) ) )
+			m_bNonBlended = m_bNonBlended || !( iCode & FLAG_CODEPOINT_BLEND );
+
+		// just accumulate
+		// manual inlining of utf8 encoder gives us a few extra percent
+		// which is important here, this is a hotspot
+		if ( m_iAccum<SPH_MAX_WORD_LEN && ( m_pAccum-m_sAccum+SPH_MAX_UTF8_BYTES<=(int)sizeof(m_sAccum) ) )
+		{
+			iCode &= MASK_CODEPOINT;
+			m_iAccum++;
+			SPH_UTF8_ENCODE ( m_pAccum, iCode );
+		}
+	}
+}
+
+template < bool IS_QUERY >
+void CSphTokenizer_UTF8Chinese<IS_QUERY>::DoGetTokens ()
+{
+	m_bWasSpecial = false;
+	m_bBlended = false;
+	m_iOvershortCount = 0;
+	m_bTokenBoundary = false;
+
+	//if ( m_dSynonyms.GetLength() )
+	//	return GetTokenSyn ( IS_QUERY );
+
+	bool IS_BLEND = m_bHasBlend;
+	
+	// release all previous tokens
+	m_sTokens.ReleaseAll(true);
+	m_pTokenStarts.Reset();
+	m_pTokenEnds.Reset();
+
+	// in query mode, lets capture (soft-whitespace hard-whitespace) sequences and adjust overshort counter
+	// sample queries would be (one NEAR $$$) or (one | $$$ two) where $ is not a valid character
+	bool bGotNonToken = ( !IS_QUERY || m_bPhrase ); // only do this in query mode, never in indexing mode, never within phrases
+	bool bGotSoft = false; // hey Beavis he said soft huh huhhuh
+
+	while(m_pCur < m_pBufferMax && *m_pCur){
+
+		// Add pending blending variants
+		if_const ( IS_BLEND )
+		{
+			BYTE * pVar = GetBlendedVariant ();
+			if ( pVar )
+			{
+				BYTE *token = new BYTE[strlen((char *)pVar) + 1];
+				memcpy(token, pVar, strlen((char *)pVar) + 1);
+				m_sTokens.Add(token);
+				m_pTokenStarts.Add((BYTE *)m_pTokenStart);
+				m_pTokenEnds.Add((BYTE *)m_pTokenEnd);
+				continue;
+			}
+			m_bBlendedPart = ( m_pBlendEnd!=NULL );
+		}
+
+		size_t iWordLength=0;
+		m_pText=(Darts::DoubleArray::key_type *)m_pCur;
+		int iNum = m_tDa.commonPrefixSearch(m_pText, m_pResultPair, 256, m_pBufferMax-m_pCur);
+
+		if( iNum == 0) {
+			BYTE *token = GetLatinToken();
+			if (token != NULL)
+			{
+				BYTE *_token = new BYTE[strlen((char *)token) + 1];
+				memcpy(_token, token, strlen((char *)token) + 1);
+				m_sTokens.Add(_token);
+				m_pTokenStarts.Add((BYTE *)m_pTokenStart);
+				m_pTokenEnds.Add((BYTE *)m_pTokenEnd);
+			} else
+			{
+				continue;
+			}
+			
+		} else if(iNum==1) {
+			//only one matched result 
+			iWordLength = m_pResultPair[0].length;
+			BYTE *token = new BYTE[ iWordLength + 1 ];
+			memcpy(token, m_pText, iWordLength);
+			token[iWordLength] = '\0';
+			m_sTokens.Add(token);
+			m_pTokenStarts.Add((BYTE *)m_pCur);
+			m_pCur += iWordLength;
+			m_pTokenEnds.Add((BYTE *)m_pCur);
+		} else if(iNum > 1) { 
+			//add all the matched results to candidate tokens
+			//iWordLength=getBestWordLength(m_pText, m_pBufferMax-m_pCur);
+			for(int iCur=0; iCur<iNum; iCur++) {
+				int iLength = m_pResultPair[iCur].length;
+				BYTE *token = new BYTE[ iLength + 1 ];
+				memcpy(token, m_pText, iLength);
+				token[iLength] = '\0';
+				m_sTokens.Add(token);
+				m_pTokenStarts.Add((BYTE *)m_pCur);
+				m_pTokenEnds.Add((BYTE *)(m_pCur + iLength));
+			}
+			iWordLength = m_pResultPair[0].length;
+			m_pCur += iWordLength;
+		}//end of if
+	}//end of while
+
+	m_bTokenized = true;
+	m_iCurToken = 0;
+
+	/*if(iWordLength==0)
+		return NULL;
+
+	assert ( iWordLength < (int)sizeof(m_sAccum) );
+	memcpy(m_sAccum, m_pText, iWordLength);
+	m_sAccum[iWordLength]='\0';
+
+	m_pTokenStart = m_pCur;
+	m_pCur += iWordLength;
+	m_pTokenEnd = m_pCur;
+
+	return m_sAccum;*/
+}
+
 
 template < bool IS_QUERY >
 void CSphTokenizer_UTF8Chinese<IS_QUERY>::FlushAccum ()
@@ -7016,6 +7380,28 @@ void CSphTokenizer_UTF8Chinese<IS_QUERY>::FlushAccum ()
 	*m_pAccum = 0;
 	m_iAccum = 0;
 	m_pAccum = m_sAccum;
+}
+
+
+template < bool IS_QUERY >
+const char * CSphTokenizer_UTF8Chinese<IS_QUERY>::GetTokenStart () const
+{
+	if (IS_QUERY)
+		return (const char *) m_pTokenStart;
+	else 
+		return (m_iCurToken > 0 && m_iCurToken <= m_pTokenStarts.GetLength()) ? (const char *)m_pTokenStarts[m_iCurToken - 1] : (const char *) m_pTokenStart;
+}
+
+
+template < bool IS_QUERY >
+const char * CSphTokenizer_UTF8Chinese<IS_QUERY>::GetTokenEnd () const
+{
+	if (IS_QUERY)
+		return (const char *) m_pTokenEnd;
+	else
+	{
+		return (m_iCurToken > 0 && m_iCurToken <= m_pTokenEnds.GetLength()) ? (const char *)m_pTokenEnds[m_iCurToken - 1] : (const char *) m_pTokenEnd;
+	}
 }
 
 

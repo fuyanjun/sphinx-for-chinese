@@ -957,6 +957,21 @@ public:
 		SafeDeleteArray ( m_pData );
 	}
 
+	/// release all memory taken by entries
+	void ReleaseAll (bool reset)
+	{
+		int cur=0;
+		while (cur < m_iLength)
+		{
+			T data = m_pData[cur++];
+			delete []data;
+		}
+		if (reset)
+		{
+			Reset();
+		}
+	}
+
 	/// query current length, in elements
 	inline int GetLength () const
 	{

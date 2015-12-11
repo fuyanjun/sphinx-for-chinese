@@ -587,19 +587,53 @@ void TestTokenizer()
 	//BYTE test[] = "\xe4\xb8\xa4\xe5\x8f\xaa\xe7\x8b\xbc\xe6\x9d\xa5\xe5\x88\xb0\xe8\x8d\x89\xe5\x8e\x9f\xef\xbc\x8c\xe4\xb8\x80\xe5\x8f\xaa\xe7\x8b\xbc\xe6\x84\x9f\xe5\x88\xb0\xe5\xbe\x88\xe5\xa4\xb1\xe8\x90\xbd\xef\xbc\x8c\xe5\x9b\xa0\xe4\xb8\xba\xe5\xae\x83\xe7\x9c\x8b\xe4\xb8\x8d\xe8\xa7\x81\xe8\x82\x89\xef\xbc\x8c\xe8\xbf\x99\xe6\x98\xaf\xe8\xa7\x86\xe5\x8a\x9b;\xe5\x8f\xa6\xe4\xb8\x80\xe5\x8f\xaa\xe7\x8b\xbc\xe6\x84\x9f\xe5\x88\xb0\xe5\xbe\x88\xe5\x85\xb4\xe5\xa5\x8b\xef\xbc\x8c\xe5\x9b\xa0\xe4\xb8\xba\xe5\xae\x83\xe7\x9f\xa5\xe9\x81\x93\xe6\x9c\x89\xe8\x8d\x89\xe5\xb0\xb1\xe4\xbc\x9a\xe6\x9c\x89\xe7\xbe\x8a\xef\xbc\x8c\xe8\xbf\x99\xe6\x98\xaf\xe8\xa7\x86\xe9\x87\x8e\xe3\x80\x82\xe7\x9c\xbc\xe7\x9d\x9b\xe5\x8f\xaa\xe8\x83\xbd\xe7\x9c\x8b\xe5\x88\xb0\xe5\xbd\x93\xe4\xb8\x8b\xef\xbc\x8c\xe7\x9c\xbc\xe5\x85\x89\xe5\x8d\xb4\xe8\x83\xbd\xe7\x9c\x8b\xe5\x88\xb0\xe6\x9c\xaa\xe6\x9d\xa5\xef\xbc\x8csphinx is good at searching.";
 	BYTE test[] = "\xe4\xb8\xad\xe5\x9b\xbd\xe5\x85\xb1\xe4\xba\xa7\xe5\x85\x9a\xe5\xb8\xa6\xe9\xa2\x86\xe6\x88\x91\xe4\xbb\xac\xe6\x89\x93\xe5\xa4\xa9\xe4\xb8\x8b";
 	pTokenizer = sphCreateUTF8ChineseTokenizer();
-	pTokenizer->SetBuffer ( (BYTE*)test, sizeof(test) );
+	ISphTokenizer * tokenizer = pTokenizer->Clone(SPH_CLONE_QUERY);
+	tokenizer->SetBuffer ( (BYTE*)test, sizeof(test) );
 	CSphString err;
-	pTokenizer->SetChineseDictionary("D:\\sphinx\\sphinx-2.2.10-release\\bin\\Debug\\xdict", err);
+	tokenizer->SetChineseDictionary("D:\\sphinx\\sphinx-2.2.10-release\\bin\\Debug\\xdict", err);
 	char gb[255];
 	size_t outlen = 255;
 	BYTE *token;
+	int idx = 0;
+	while ((token = tokenizer->GetToken()) != NULL)
+	{
+		code_convert("utf-8","gb2312", (char *)token, strlen((char*)token), gb,outlen);
+		printf("%d===>utf8: %s(%d), gb2312: %s(%d), start: %c, end: %c", ++idx, token, strlen((char*)token), gb, strlen(gb),
+			tokenizer->GetTokenStart(), tokenizer->GetTokenEnd());
+		printf("\n");
+	}
+	idx = 0;
+	pTokenizer->SetBuffer ( (BYTE*)test, sizeof(test) );
+	pTokenizer->SetChineseDictionary("D:\\sphinx\\sphinx-2.2.10-release\\bin\\Debug\\xdict", err);
 	while ((token = pTokenizer->GetToken()) != NULL)
 	{
 		code_convert("utf-8","gb2312", (char *)token, strlen((char*)token), gb,outlen);
-		printf(gb);
+		printf("%d===>utf8: %s(%d), gb2312: %s(%d), start: %c, end: %c", ++idx, token, strlen((char*)token), gb, strlen(gb),
+			pTokenizer->GetTokenStart(), pTokenizer->GetTokenEnd());
+		printf("\n");
+	}
+	//BYTE test2[] = "\xe4\xb8\xad\xe5\x9b\xbd\xe5\x85\xb1\xe4\xba\xa7\xe5\x85\x9a\xe5\xb8\xa6\xe9\xa2\x86\xe6\x88\x91\xe4\xbb\xac\xe6\x89\x93\xe5\xbc\x80\xe4\xb8\x8bi am a singer, my email is asdfaga@163.com";
+	BYTE test2[] = " singer, my email fyj@163.com. Nice to meet you.   ";
+	tokenizer->SetBuffer ( (BYTE*)test2, sizeof(test2) );
+	idx = 0;
+	while ((token = tokenizer->GetToken()) != NULL)
+	{
+		code_convert("utf-8","gb2312", (char *)token, strlen((char*)token), gb,outlen);
+		printf("%d===>utf8: %s(%d), gb2312: %s(%d), start: %c, end: %c", ++idx, token, strlen((char*)token), gb, strlen(gb),
+			tokenizer->GetTokenStart(), tokenizer->GetTokenEnd());
+		printf("\n");
+	}
+	idx = 0;
+	pTokenizer->SetBuffer ( (BYTE*)test2, sizeof(test2) );
+	while ((token = pTokenizer->GetToken()) != NULL)
+	{
+		code_convert("utf-8","gb2312", (char *)token, strlen((char*)token), gb,outlen);
+		printf("%d===>utf8: %s(%d), gb2312: %s(%d), start: %c, end: %c", ++idx, token, strlen((char*)token), gb, strlen(gb),
+			pTokenizer->GetTokenStart(), pTokenizer->GetTokenEnd());
 		printf("\n");
 	}
 	delete pTokenizer;
+	delete tokenizer;
 }
 
 
