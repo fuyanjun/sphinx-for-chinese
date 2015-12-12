@@ -13371,7 +13371,7 @@ void HandleCommandKeywords ( int iSock, int iVer, InputBuffer_c & tReq )
 	CSphString sError;
 	CSphVector < CSphKeywordInfo > dKeywords;
 	// may need to set tokenizer working in QUERY mode instead of INDEX mode
-	if ( !pIndex->m_pIndex->GetKeywords ( dKeywords, sQuery.cstr (), bGetStats, &sError ) )
+	if ( !pIndex->m_pIndex->GetKeywords ( dKeywords, sQuery.cstr (), bGetStats, &sError, SPH_CLONE_QUERY ) )
 	{
 		tReq.SendErrorReply ( "error generating keywords: %s", sError.cstr () );
 		pIndex->Unlock();

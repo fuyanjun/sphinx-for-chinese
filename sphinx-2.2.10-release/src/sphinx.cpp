@@ -1455,6 +1455,7 @@ public:
 	virtual bool				MultiQuery ( const CSphQuery * , CSphQueryResult * , int , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const { return false; }
 	virtual bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult ** , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const { return false; }
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , bool , CSphString * ) const;
+	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , bool , CSphString * , ESphTokenizerClone ) const;
 	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const { return true; }
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & , int , CSphString & , CSphString & ) { return -1; }
 	virtual bool				SaveAttributes ( CSphString & ) const { return false; }
@@ -1498,6 +1499,49 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 		return true;
 
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( SPH_CLONE_INDEX ) ); // avoid race
+	pTokenizer->EnableTokenizedMultiformTracking ();
+
+	// need to support '*' and '=' but not the other specials
+	// so m_pQueryTokenizer does not work for us, gotta clone and setup one manually
+	if ( IsStarDict() )
+		pTokenizer->AddPlainChar ( '*' );
+	if ( m_tSettings.m_bIndexExactWords )
+		pTokenizer->AddPlainChar ( '=' );
+
+	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
+	CSphDict * pDictBase = m_pDict;
+	if ( pDictBase->HasState() )
+		tDictCloned = pDictBase = pDictBase->Clone();
+
+	CSphDict * pDict = pDictBase;
+	if ( IsStarDict() )
+		pDict = new CSphDictStar ( pDictBase );
+
+	if ( m_tSettings.m_bIndexExactWords )
+		pDict = new CSphDictExact ( pDict );
+
+	dKeywords.Resize ( 0 );
+
+	pTokenizer->SetBuffer ( (const BYTE*)szQuery, strlen(szQuery) );
+
+	CSphTemplateQueryFilter tAotFilter;
+	tAotFilter.m_pTokenizer = pTokenizer.Ptr();
+	tAotFilter.m_pDict = pDict;
+	tAotFilter.m_pSettings = &m_tSettings;
+
+	tAotFilter.GetKeywords ( dKeywords );
+
+	return true;
+}
+
+
+bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery,  bool bGetStats, CSphString * sError, ESphTokenizerClone eMode) const
+{
+	// short-cut if no query or keywords to fill
+	if ( !szQuery || !szQuery[0] )
+		return true;
+
+	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( eMode ) ); // avoid race
 	pTokenizer->EnableTokenizedMultiformTracking ();
 
 	// need to support '*' and '=' but not the other specials
@@ -1584,7 +1628,9 @@ public:
 	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
 	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString * pError ) const;
+	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString * pError, ESphTokenizerClone eMode ) const;
 	template <class Qword> bool	DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, bool bFillOnly, CSphString * pError ) const;
+	template <class Qword> bool	DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, bool bFillOnly, CSphString * pError, ESphTokenizerClone eMode) const;
 	virtual bool 				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const;
 
 	virtual bool				Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists );
@@ -7190,7 +7236,8 @@ BYTE * CSphTokenizer_UTF8Chinese<IS_QUERY>::GetLatinToken ()
 			{
 				if ( m_iLastTokenLen )
 					m_iOvershortCount++;
-				continue;
+				return NULL;
+				//continue;
 				//break;
 			} else
 			{
@@ -18959,6 +19006,14 @@ bool CSphIndex_VLN::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 }
 
 
+bool CSphIndex_VLN::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, 
+								 CSphString * pError, ESphTokenizerClone eMode ) const
+{
+	WITH_QWORD ( this, false, Qword, return DoGetKeywords<Qword> ( dKeywords, szQuery, bGetStats, false, pError, eMode ) );
+	return false;
+}
+
+
 DWORD sphParseMorphAot ( const char * sMorphology )
 {
 	if ( !sMorphology || !*sMorphology )
@@ -19134,6 +19189,101 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 
 	// TODO: in case of bFillOnly skip tokenizer cloning and setup
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( SPH_CLONE_INDEX ) ); // avoid race
+	pTokenizer->EnableTokenizedMultiformTracking ();
+
+	// need to support '*' and '=' but not the other specials
+	// so m_pQueryTokenizer does not work for us, gotta clone and setup one manually
+	if ( IsStarDict() )
+		pTokenizer->AddPlainChar ( '*' );
+	if ( m_tSettings.m_bIndexExactWords )
+		pTokenizer->AddPlainChar ( '=' );
+
+	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
+	CSphDict * pDictBase = m_pDict;
+	if ( pDictBase->HasState() )
+		tDictCloned = pDictBase = pDictBase->Clone();
+
+	CSphScopedPtr<CSphDict> tDict ( NULL );
+	CSphDict * pDict = SetupStarDict ( tDict, pDictBase );
+
+	CSphScopedPtr<CSphDict> tDict2 ( NULL );
+	pDict = SetupExactDict ( tDict2, pDict );
+
+	// FIXME!!! missed bigram, FieldFilter, add flags to fold blended parts, show expanded terms
+
+	// prepare for setup
+	CSphAutofile tDummy1, tDummy2;
+
+	DiskIndexQwordSetup_c tTermSetup ( tDummy1, tDummy2, m_pSkiplists.GetWritePtr(), NULL );
+	tTermSetup.m_pDict = pDict;
+	tTermSetup.m_pIndex = this;
+	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
+
+	Qword tQueryWord ( false, false );
+
+	CSphPlainQueryFilter tAotFilter;
+	tAotFilter.m_pTokenizer = pTokenizer.Ptr();
+	tAotFilter.m_pDict = pDict;
+	tAotFilter.m_pSettings = &m_tSettings;
+	tAotFilter.m_bGetStats = bGetStats;
+	tAotFilter.m_pTermSetup = &tTermSetup;
+	tAotFilter.m_pQueryWord = &tQueryWord;
+
+	if ( !bFillOnly )
+	{
+		pTokenizer->SetBuffer ( (const BYTE *)szQuery, strlen(szQuery) );
+
+		tAotFilter.GetKeywords ( dKeywords );
+	} else
+	{
+		BYTE sWord[MAX_KEYWORD_BYTES];
+
+		ARRAY_FOREACH ( i, dKeywords )
+		{
+			CSphKeywordInfo & tInfo = dKeywords[i];
+			int iLen = tInfo.m_sTokenized.Length();
+			memcpy ( sWord, tInfo.m_sTokenized.cstr(), iLen );
+			sWord[iLen] = '\0';
+
+			SphWordID_t iWord = pDict->GetWordID ( sWord );
+			if ( iWord )
+			{
+				tQueryWord.Reset ();
+				tQueryWord.m_sWord = tInfo.m_sTokenized;
+				tQueryWord.m_sDictWord = (const char*)sWord;
+				tQueryWord.m_uWordID = iWord;
+				tTermSetup.QwordSetup ( &tQueryWord );
+
+				tInfo.m_iDocs += tQueryWord.m_iDocs;
+				tInfo.m_iHits += tQueryWord.m_iHits;
+			}
+		}
+	}
+
+	return true;
+}
+
+
+template < class Qword >
+bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, 
+								   bool bFillOnly, CSphString * pError, ESphTokenizerClone eMode ) const
+{
+	if ( !bFillOnly )
+		dKeywords.Resize ( 0 );
+
+	if ( !m_pPreread || !*m_pPreread )
+	{
+		if ( pError )
+			*pError = "index not preread";
+		return false;
+	}
+
+	// short-cut if no query or keywords to fill
+	if ( ( bFillOnly && !dKeywords.GetLength() ) || ( !bFillOnly && ( !szQuery || !szQuery[0] ) ) )
+		return true;
+
+	// TODO: in case of bFillOnly skip tokenizer cloning and setup
+	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( eMode ) ); // avoid race
 	pTokenizer->EnableTokenizedMultiformTracking ();
 
 	// need to support '*' and '=' but not the other specials
