@@ -2179,9 +2179,9 @@ public:
 
 		// OPTIMIZE! do a lightweight indexing clone here
 		if ( tSettings.m_bHighlightQuery && pIndex->GetSettings().m_uAotFilterMask )
-			m_tTokenizer = sphAotCreateFilter ( pIndex->GetTokenizer()->Clone ( SPH_CLONE_INDEX ), m_pDict, pIndex->GetSettings().m_bIndexExactWords, pIndex->GetSettings().m_uAotFilterMask );
+			m_tTokenizer = sphAotCreateFilter ( pIndex->GetTokenizer()->Clone ( SPH_CLONE_QUERY ), m_pDict, pIndex->GetSettings().m_bIndexExactWords, pIndex->GetSettings().m_uAotFilterMask );
 		else
-			m_tTokenizer = pIndex->GetTokenizer()->Clone ( SPH_CLONE_INDEX );
+			m_tTokenizer = pIndex->GetTokenizer()->Clone ( SPH_CLONE_QUERY );
 
 		m_pQueryTokenizer = NULL;
 		if ( tSettings.m_bHighlightQuery || tSettings.m_bExactPhrase )
@@ -2190,7 +2190,7 @@ public:
 		} else
 		{
 			// legacy query mode should handle exact form modifier and star wildcard
-			m_pQueryTokenizer = pIndex->GetTokenizer()->Clone ( SPH_CLONE_INDEX );
+			m_pQueryTokenizer = pIndex->GetTokenizer()->Clone ( SPH_CLONE_QUERY );
 			if ( pIndex->IsStarDict() )
 				m_pQueryTokenizer->AddPlainChar ( '*' );
 			if ( pIndex->GetSettings().m_bIndexExactWords )
