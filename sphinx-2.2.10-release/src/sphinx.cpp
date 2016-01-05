@@ -7387,8 +7387,10 @@ void CSphTokenizer_UTF8Chinese<IS_QUERY>::DoGetTokens ()
 		} else if(iNum > 1) { 
 			//add all the matched results to candidate tokens
 			//iWordLength=getBestWordLength(m_pText, m_pBufferMax-m_pCur);
+			iWordLength = m_pResultPair[0].length;
 			for(int iCur=0; iCur<iNum; iCur++) {
 				int iLength = m_pResultPair[iCur].length;
+				iWordLength = iLength < iWordLength ? iLength : iWordLength;
 				BYTE *token = new BYTE[ iLength + 1 ];
 				memcpy(token, m_pText, iLength);
 				token[iLength] = '\0';
@@ -7396,7 +7398,6 @@ void CSphTokenizer_UTF8Chinese<IS_QUERY>::DoGetTokens ()
 				m_pTokenStarts.Add((BYTE *)m_pCur);
 				m_pTokenEnds.Add((BYTE *)(m_pCur + iLength));
 			}
-			iWordLength = m_pResultPair[0].length;
 			m_pCur += iWordLength;
 		}//end of if
 	}//end of while
